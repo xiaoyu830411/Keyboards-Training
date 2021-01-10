@@ -1,3 +1,4 @@
+
 //
 //  KeyEvent.swift
 //  Keyboards-Training
@@ -6,80 +7,86 @@
 //
 
 import Foundation
-import Combine
 
-protocol KeyCommandPublisher : Publisher {
-        
-    func next()
+protocol KeyCommandListener {
     
+    func receive(_ event: KeyEvent)
 }
 
-protocol KeyCommandSubscriber: Subscriber {
+class KeyCommandPublisher {
+    var listeners = [KeyCommandListener]()
     
-    func onKeyCommand<P>(_ publisher: P, perform action: (P.Output) -> Void) where P: KeyCommandPublisher, P.Failure == Never
-}
-
-extension KeyCommandSubscriber {
-    typealias Input = String
-    typealias Failure = Never
-    
-    func receive(subscription: Subscription) {
-        subscription.request(.unlimited)
+    func addListener(_ listener: KeyCommandListener) {
+        listeners.append(listener)
     }
     
-    func receive(_ input: String) -> Subscribers.Demand {
-        if input != nil {
-            return .max(1)
+    func send(event: KeyEvent) {
+        for listener in listeners {
+            listener.receive(event)
         }
-        
-        return .none
     }
-    
-    func receive(completion: Subscribers.Completion<Self.Failure>) {
-        
-    }
-    
 }
 
-final class SequencedKeyPublisher: KeyCommandPublisher {
-    
-    typealias Output = String
-    
-    typealias Failure = Never
-    
-    private let subject = PassthroughSubject<String, Never>()
-    
+protocol Nexter {
+    func next()
+}
+
+enum KeyEvent {
+    case Exception(key: String), Inputted(key: String)
+}
+
+final class SequencedKeyPublisher: KeyCommandPublisher, Nexter {
+        
     private var currentPosition = 0
     
     func next() {
         let char = currentPosition + 65
-        subject.send(String(Character(UnicodeScalar(char)!)))
+        self.send(event: KeyEvent.Exception(key: String(Character(UnicodeScalar(char)!))))
         self.currentPosition += 1
         self.currentPosition = self.currentPosition % 26
     }
     
-    func receive<S>(subscriber: S) where S : Subscriber, Failure == S.Failure, Output == S.Input {
-        self.subject.receive(subscriber: subscriber)
-    }
 }
 
-final class RandomKeyPublisher: KeyCommandPublisher {
-    
-    typealias Output = String
-    
-    typealias Failure = Never
-    
-    private let subject = PassthroughSubject<String, Never>()
+final class RandomKeyPublisher: KeyCommandPublisher, Nexter {
         
     private var currentPosition = 0
 
     func next() {
         let currentPosition = arc4random() % 26
         let char = 65 + currentPosition
-        subject.send(String(Character(UnicodeScalar(char)!)))
+        self.send(event: KeyEvent.Exception(key: String(Character(UnicodeScalar(char)!))))
+    }
+}
+
+final class KeyNexter: Nexter, KeyCommandListener {
+    var key = ""
+    var exception: Nexter
+    
+    init(exception: Nexter) {
+        self.exception = exception
     }
     
-    func receive<S>(subscriber: S) where S : Subscriber, Failure == S.Failure, Output == S.Input {
-        self.subject.receive(subscriber: subscriber)
+    func receive(_ event: KeyEvent) {
+        switch event {
+        case .Inputted(let key) :
+            if self.key == key {
+                exception.next()
+            }
+        default:
+            return
+        }
     }
+    
+    func next() {
+        self.exception.next()
+    }
+}
+
+final class InputtedKeyPubliser: KeyCommandPublisher, Nexter {
+    func next() {
+        <#code#>
+    }
+    
+    
 }
